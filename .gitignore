@@ -1,0 +1,16 @@
+.venv/
+venv/
+.idea/
+.env
+.env.*
+!.env.example
+credentials.json
+*service-account*.json
+temp_audio/
+celerybeat-schedule*
+celerybeat.pid
+.current_month
+media/
+logs/
+__pycache__/
+*.py[cod]

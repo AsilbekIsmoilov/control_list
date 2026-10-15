@@ -1,0 +1,119 @@
+{% load static %}
+{% load filters %}
+
+<div id="page-loader"></div>
+
+<div class="block3">
+  <h2 class="comment-title">Комментарий</h2>
+
+  <div class="comment-box">
+    {% for i in "1,2,3,4,5,6,7,8,9,10"|split:"," %}
+      {% with comment_field="comment"|add:i %}
+        {% if monthly_scores %}
+          {% with comment=monthly_scores|get_dynamic_attr:comment_field %}
+            {% with call_code=comment|regex_search:"Код\\s+звонка\\s*:\\s*([\\w\\-]+)" %}
+              {% with audio_src=call_code_to_url|get_item:call_code %}
+                {% if audio_src %}
+                  <p class="comment-item" style="cursor:pointer" data-src="{{ audio_src }}">
+                    {{ i }}) {{ comment|default:"" }}
+                  </p><br>
+                {% else %}
+                  <p class="comment-item">{{ i }}) {{ comment|default:"" }}</p><br>
+                {% endif %}
+              {% endwith %}
+            {% endwith %}
+          {% endwith %}
+        {% else %}
+          {% with comment=selected_operator|get_dynamic_attr:comment_field %}
+            {% with call_code=comment|regex_search:"Код\\s+звонка\\s*:\\s*([\\w\\-]+)" %}
+              {% with audio_src=call_code_to_url|get_item:call_code %}
+                {% if audio_src %}
+                  <p class="comment-item" style="cursor:pointer" data-src="{{ audio_src }}">
+                    {{ i }}) {{ comment|default:"" }}
+                  </p><br>
+                {% else %}
+                  <p class="comment-item">{{ i }}) {{ comment|default:"" }}</p><br>
+                {% endif %}
+              {% endwith %}
+            {% endwith %}
+          {% endwith %}
+        {% endif %}
+      {% endwith %}
+      <hr>
+    {% endfor %}
+  </div>
+
+  <div class="audio-error-block">
+
+    <audio id="audio-player" preload="auto"></audio>
+
+    <div class="custom-audio-player">
+      <div class="row-controls">
+        <div class="control-group-left">
+          <button class="control-button backward" title="10 сек назад">
+            <img src="{% static 'img/left.png' %}">
+          </button>
+          <button class="control-button play-pause" title="Play / Pause">
+            <img src="{% static 'img/play.png' %}">
+          </button>
+          <button class="control-button forward" title="10 сек вперёд">
+            <img src="{% static 'img/right.png' %}">
+          </button>
+        </div>
+
+        <input type="range" class="seek-bar" value="0" step="1">
+        <span class="time-display">00:00 / 00:00</span>
+      </div>
+
+      <div class="bottom-controls">
+        <div class="speed-group">
+          <label>Скорость:</label>
+          <select class="speed-select">
+            <option value="0.75">0.75×</option>
+            <option value="1" selected>1×</option>
+            <option value="1.25">1.25×</option>
+            <option value="1.5">1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </div>
+
+        <div class="volume-group">
+          <label>Громкость:</label>
+          <input type="range" class="volume-range" min="0" max="1" step="0.01" value="1">
+        </div>
+      </div>
+    </div>
+
+    <div class="error-types">
+      {# Arxiv oyi tanlangan bo'lsa o'shanikini, aks holda joriy oyni ko'rsatamiz. #}
+      {% with source=monthly_scores|default:selected_operator %}
+      <div class="error-type">
+        <div class="error-circle level-25{% if source.mis1 >= 1 %} has-errors{% endif %}"
+             data-error-type="25">
+          {{ source.mis1|default:0 }}
+        </div>
+        <span>Ошибка(-25)</span>
+      </div>
+
+      <div class="error-type">
+        <div class="error-circle level-10{% if source.mis2 >= 1 %} has-errors{% endif %}"
+             data-error-type="10">
+          {{ source.mis2|default:0 }}
+        </div>
+        <span>Ошибка(-10)</span>
+      </div>
+
+      <div class="error-type">
+        <div class="error-circle level-2{% if source.mis3 >= 1 %} has-errors{% endif %}"
+             data-error-type="2">
+          {{ source.mis3|default:0 }}
+        </div>
+        <span>Недочет(-2)</span>
+      </div>
+      {% endwith %}
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'hls.min.js' %}"></script>
+<script src="{% static 'block3.js' %}"></script>

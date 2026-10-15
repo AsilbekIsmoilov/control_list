@@ -1,0 +1,395 @@
+{% load static %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<form method="get" id="operator-form">
+<div class="block1">
+    <div class="group1">
+        <div class="logo-div" style="position: relative; cursor: pointer;">
+            <img id="logo"
+                 src="{% static 'img/logo.png' %}"
+                 alt="Company Logo">
+        </div>
+
+        <a href="{% url 'list2' %}?operator-name={{ selected_operator.name }}">
+        <div class="score-div">
+            <canvas id="scoreChart" width="150" height="150"></canvas>
+            <div class="radial-text">
+                <div class="score-number">
+                    {% if monthly_scores %}
+                        {{ monthly_scores.mark|default_if_none:"Нет данных" }}
+                    {% elif selected_operator and selected_month_param|default:""|add:""|length == 0 %}
+                        {{ selected_operator.mark|default_if_none:"Нет данных" }}
+                    {% else %}
+                        Нет данных
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        </a>
+    </div>
+
+    <div class="group2">
+        <div class="month-div">
+            <div class="input-wrapper">
+                <i class="fa fa-search" aria-hidden="true"></i>
+                <input type="text" id="operator-name" name="operator-name"
+                       placeholder="                              Поиск"
+                       oninput="filterDropdown()" autocomplete="off"
+                       {% if selected_operator %}
+                       value="{{ selected_operator.name }}"
+                       {% endif %}>
+            </div>
+            <div id="dropdown">
+                {% for operator in operators %}
+                <div class="dropdown-item" data-name="{{ operator.name }}">
+                    {{ operator.name }}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="status-div">
+            <div class="status info" style="text-align: center;">
+                {% if monthly_scores %}
+                    {{ monthly_scores.bl }}
+                {% else %}
+                    {{ selected_operator.bl }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="group3">
+        <div class="profile-info">
+<div class="profile-name-wrapper">
+  <div class="scrolling-name" id="scrollingName">{{ selected_operator.name }} &nbsp;&nbsp;&nbsp; {{ selected_operator.name }} </div>
+</div>
+            <div class="profile-group">
+                {{ selected_operator.group }}
+            </div>
+
+            {% if selected_operator and month_names_in_db %}
+            <div>
+                <form method="get">
+                    <label for="month-select"></label>
+                    <select name="month" id="month-select" onchange="this.form.submit()">
+                        {% for month, month_name in month_names_in_db %}
+                            <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>
+                                {{ month_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+<div class="profile-photo" id="profilePhoto">
+    {% if operator_photo_url %}
+    <img src="{{ operator_photo_url }}" alt="Фото">
+    {% else %}
+    <img src="{% static 'img/profile.png' %}" alt="Default Avatar">
+    {% endif %}
+
+<div class="profile-overlay" id="openModalBtn">
+    <i class="fa fa-calendar"></i>
+</div>
+
+<div id="profileModal" class="modal">
+    <div class="modal-content">
+
+        <div class="modal-header">
+            <button id="backBtn">x</button>
+            <div id="monthTitle" class="month-title"></div>
+        </div>
+
+        <div class="calendar-header">
+            <div>Пн</div>
+            <div>Вт</div>
+            <div>Ср</div>
+            <div>Чт</div>
+            <div>Пт</div>
+            <div>Сб</div>
+            <div>Вс</div>
+        </div>
+
+        <div id="calendarGrid" class="calendar-grid"></div>
+
+    </div>
+</div>
+</div>
+    </div>
+    <div style="clear: both;"></div>
+</div>
+</form>
+<script src="{% static 'back.js' %}"></script>
+<script>
+    const backgrounds = [
+        {% for bg in backgrounds %}
+            "{{ bg.image.url }}"{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+let lastLogTime = 0;
+const LOG_DELAY = 5000;
+
+
+    function getCookie(name) {
+    let cookieValue = null;
+
+    if (document.cookie && document.cookie !== "") {
+        const cookies = document.cookie.split(";");
+
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+
+            if (cookie.startsWith(name + "=")) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+
+    return cookieValue;
+}
+
+ const profilePhoto = document.getElementById("profilePhoto");
+    const modal = document.getElementById("profileModal");
+    const openBtn = document.getElementById("openModalBtn");
+    const backBtn = document.getElementById("backBtn");
+    const calendar = document.getElementById("calendarGrid");
+    const monthTitle = document.getElementById("monthTitle");
+    const monthSelect = document.getElementById("month-select");
+    const operatorInput = document.getElementById("operator-name");
+
+    let locked = false;
+    let timeout;
+    let scheduleData = {};
+
+    function getMonthName(monthNumber) {
+        const monthMap = {
+            1: "Январь",
+            2: "Февраль",
+            3: "Март",
+            4: "Апрель",
+            5: "Май",
+            6: "Июнь",
+            7: "Июль",
+            8: "Август",
+            9: "Сентябрь",
+            10: "Октябрь",
+            11: "Ноябрь",
+            12: "Декабрь"
+        };
+
+        return monthMap[monthNumber] || "";
+    }
+
+    function getCalendarYearMonth() {
+        const now = new Date();
+
+        return {
+            year: now.getFullYear(),
+            month: now.getMonth() + 1
+        };
+    }
+
+    function cleanOperatorName(fullText) {
+        if (!fullText) return "";
+
+        return fullText
+            .trim()
+            .replace(/\(\d+\)\s*$/, "")
+            .trim();
+    }
+
+    function buildOperatorSlug(fullText) {
+        if (!fullText) return "";
+
+        return fullText
+            .trim()
+            .replace(/\(\d+\)\s*$/, "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, "_");
+    }
+
+    function buildScheduleApiUrl() {
+        const operatorName = operatorInput ? operatorInput.value : "";
+        const operatorSlug = buildOperatorSlug(operatorName);
+        const { year, month } = getCalendarYearMonth();
+
+        if (!operatorSlug) {
+            return null;
+        }
+
+        return `http://192.168.42.172:4020/api/v1/operator-schedules/${operatorSlug}/?year=${year}&month=${month}`;
+    }
+
+    async function logCalendarOpen() {
+        const operatorName = operatorInput ? cleanOperatorName(operatorInput.value) : "";
+        const apiRequestUrl = buildScheduleApiUrl();
+
+        try {
+            await fetch("/log-calendar-open/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken")
+                },
+                body: JSON.stringify({
+                    operator_name: operatorName,
+                    api_request_url: apiRequestUrl
+                })
+            });
+        } catch (error) {
+            console.error("Log yuborishda xatolik:", error);
+        }
+    }
+
+    async function logCalendarOpenWithDelay() {
+    const now = Date.now();
+
+    if (now - lastLogTime < LOG_DELAY) {
+        return;
+    }
+
+    lastLogTime = now;
+
+    await logCalendarOpen();
+}
+
+    async function loadScheduleFromApi() {
+        const url = buildScheduleApiUrl();
+        const { year, month } = getCalendarYearMonth();
+
+        if (!url) {
+            console.error("Operator tanlanmagan");
+            scheduleData = {};
+            renderCalendar(year, month, scheduleData);
+            return;
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    "Accept": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`API xato: ${response.status}`);
+            }
+
+            const data = await response.json();
+            scheduleData = data.days || {};
+
+            renderCalendar(data.year || year, data.month || month, scheduleData);
+        } catch (error) {
+            console.error("Grafikni olishda xatolik:", error);
+            scheduleData = {};
+            renderCalendar(year, month, scheduleData);
+        }
+    }
+
+    function renderCalendar(year, month, scheduleData) {
+        calendar.innerHTML = "";
+        monthTitle.innerText = `${getMonthName(month)} ${year}`;
+
+        const today = new Date();
+        const firstDay = new Date(year, month - 1, 1).getDay();
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const startDay = firstDay === 0 ? 6 : firstDay - 1;
+
+        for (let i = 0; i < startDay; i++) {
+            const empty = document.createElement("div");
+            calendar.appendChild(empty);
+        }
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const day = document.createElement("div");
+            day.classList.add("calendar-day");
+
+            const number = document.createElement("div");
+            number.classList.add("day-number");
+            number.innerText = i;
+
+            const time = document.createElement("div");
+            time.classList.add("day-time");
+
+            const value = scheduleData[String(i)];
+
+            if (value) {
+                time.innerText = value;
+            } else {
+                time.innerText = "-";
+                day.classList.add("day-off");
+            }
+
+            if (
+                i === today.getDate() &&
+                month === today.getMonth() + 1 &&
+                year === today.getFullYear()
+            ) {
+                day.classList.add("today");
+            }
+
+            day.appendChild(number);
+            day.appendChild(time);
+            calendar.appendChild(day);
+        }
+    }
+
+let hoverLogged = false;
+
+profilePhoto.addEventListener("mouseenter", async () => {
+    if (!locked) {
+        clearTimeout(timeout);
+        modal.style.display = "block";
+
+        await logCalendarOpenWithDelay();
+
+        await loadScheduleFromApi();
+    }
+});
+
+profilePhoto.addEventListener("mouseleave", () => {
+    if (!locked) {
+        timeout = setTimeout(() => {
+            modal.style.display = "none";
+            hoverLogged = false;
+        }, 150);
+    }
+});
+
+    modal.addEventListener("mouseenter", () => {
+        clearTimeout(timeout);
+    });
+
+    modal.addEventListener("mouseleave", () => {
+        if (!locked) {
+            modal.style.display = "none";
+        }
+    });
+
+openBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    locked = true;
+    modal.style.display = "block";
+
+    await logCalendarOpenWithDelay();
+
+    await loadScheduleFromApi();
+});
+
+    backBtn.addEventListener("click", () => {
+        modal.style.display = "none";
+        locked = false;
+    });
+</script>
+
+
+
+
+
+
